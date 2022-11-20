@@ -68,13 +68,29 @@ struct cluster_t {
 typedef struct obj_t obj_t;
 typedef struct cluster_t cluster_t;
 
+void clear_cluster(struct cluster_t *c);
+
 /**********************************************************************/
 /* Vlastni funkce*/
 
-void raise_error(FILE *f, cluster_t **arr, char *msg) {
-    if (arr) {
-        free(arr);
+void clear_clusters(cluster_t *clusters, int size) {
+    assert(clusters != NULL);
+
+    for (int i = 0; i < size; i++) {
+        clear_cluster(&clusters[i]);
     }
+}
+
+// Takes pointer to array of clusters, free's all the clusters and the array
+// Then it free's array of ID's nad closes a file
+void raise_error(FILE *f, cluster_t **clusters_ptr, int clusters_size, int *ids, char *msg) {
+    if (clusters_ptr && *clusters_ptr) {
+        clear_clusters(*clusters_ptr, clusters_size);
+        free(*clusters_ptr);
+        *clusters_ptr = NULL;
+    }
+
+    free(ids);
 
     if (f) {
         fclose(f);
@@ -92,6 +108,10 @@ bool array_contains(int *arr, int len, int num) {
     }
     
     return false;
+}
+
+bool is_integer(float num) {
+    return (int)num == num;
 }
 
 /*****************************************************************
@@ -113,7 +133,12 @@ void init_cluster(struct cluster_t *c, int cap)
     assert(cap >= 0);
 
     c->size = 0;
-    c->obj = malloc(cap * sizeof(struct obj_t));
+
+    if (cap == 0) {
+        c->obj = NULL;
+    } else {
+        c->obj = malloc(cap * sizeof(struct obj_t));
+    }
 
     if (c->obj == NULL) {
         cap = 0;
@@ -130,8 +155,9 @@ void clear_cluster(struct cluster_t *c)
     assert(c != NULL);
 
     free(c->obj);
-    c->size = 0;
-    c->capacity = 0;
+    init_cluster(c, 0);
+    // c->capacity = 0;
+    // c->size = 0;
 }
 
 /// Chunk of cluster objects. Value recommended for reallocation.
@@ -334,56 +360,70 @@ int load_clusters(char *filename, struct cluster_t **arr)
     assert(arr != NULL);
 
     FILE *file = fopen(filename, "r");
+    float raw_n;
     int n;
     int *ids;
+    *arr = NULL;
 
     if (file == NULL) {
-        raise_error(NULL, NULL, "Error: File could not be opened.");
+        raise_error(NULL, NULL, 0, NULL, "Error: File could not be opened.");
         return 0;
     }
 
-    fscanf(file, "count=%d", &n);
+    fscanf(file, "count=%f", &raw_n);
+
+    if (!is_integer(raw_n)) {
+        raise_error(file, NULL, 0, NULL, "Error: Count has to be an integer.");
+        return 0;
+    }
+
+    n = (int) raw_n;
 
     if (n < 1) {
-        raise_error(file, arr, "Error: Invalid cluster count.");
+        raise_error(file, NULL, 0, NULL, "Error: Invalid cluster count.");
         return 0;
     }
 
-    ids = malloc(n * sizeof(*ids));
+    ids = calloc(n, sizeof(*ids));
     (*arr) = malloc(n * sizeof(struct cluster_t));
 
     if (*arr == NULL || ids == NULL) {
-        raise_error(file, arr, "Error: Memory allocation failed.");
+        raise_error(file, arr, 0, ids, "Error: Memory allocation failed.");
         return 0;
     }
 
     for (int i = 0; i < n; i++) {
-        int id;
-        float x, y;
+        float id, x, y;
 
-        if (array_contains(ids, i, id)) {
-            raise_error(file, arr, "Error: Object ID is not unique.");
+        if (fscanf(file, "%f %f %f\n", &id, &x, &y) != 3) {
+            raise_error(file, arr, i, ids, "Error: Invalid format of input.");
             return 0;
         }
 
-        if (fscanf(file, "%d %f %f", &id, &x, &y) != 3) {
-            raise_error(file, arr, "Error: Invalid format of input. Required format is ID[int] x[float] y[float].");
+        if (!is_integer(id) || !is_integer(x) || !is_integer(y)) {
+            raise_error(file, arr, i, ids, "Error: Invalid format of input. Numbers have to be integers.");
+            return 0;
+        }
+
+        if (array_contains(ids, i, id)) {
+            raise_error(file, arr, i, ids, "Error: Object ID is not unique.");
             return 0;
         }
 
         if (x < 0 || x > 1000 || y < 0 || y > 1000) {
-            raise_error(file, arr, "Error: Invalid coordinates. Coordinates must be in range <0, 1000>.");
+            raise_error(file, arr, i, ids, "Error: Invalid coordinates. Coordinates must be in range <0, 1000>.");
             return 0;
         }
 
-        obj_t obj = {id, x, y};
+        obj_t obj = { (int)id, x, y};
         init_cluster(&((*arr)[i]), 1);
         append_cluster(&((*arr)[i]), obj);
 
-        // ids[i] = id;
+        ids[i] = id;
     }
 
     fclose(file);
+    free(ids);
 
     return n;
 }
@@ -415,10 +455,33 @@ void print_clusters(struct cluster_t *carr, int narr)
 int main(int argc, char *argv[])
 {
     struct cluster_t *clusters;
-    int k;
+    double raw_k;
+    int k = 0;
 
-    if (argc == 1) {
+    switch (argc)
+    {
+    case 1:
         fprintf(stderr, "Error: You have to specify the filename.\n");
+        return EXIT_FAILURE;
+    case 2:
+        k = 1;
+        break;
+    case 3:
+        raw_k = atof(argv[2]);
+        if (!is_integer(raw_k)) {
+            fprintf(stderr, "Error: N has to be a integer.\n");
+            return EXIT_FAILURE;
+        }
+
+        k = (int) raw_k;
+        break;
+    default:
+        fprintf(stderr, "Error: Unknown parameter.\n");
+        return EXIT_FAILURE;
+    }
+
+    if (k < 1) {
+        fprintf(stderr, "Error: N parameter has to be integer greater than 0.\n");
         return EXIT_FAILURE;
     }
 
@@ -428,22 +491,11 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    if (argc < 3) {
-        k = 1;
-    } else {
-        k = atoi(argv[2]);
-        if (k < 1) {
-            fprintf(stderr, "Error: N parameter has to be greater than 0.\n");
-            return EXIT_FAILURE;
-        }
-    }
-
     if (k > n) {
         k = n;
     }
 
     process(clusters, n, k);
-
     print_clusters(clusters, k);
 
     for (int i = 0; i < k; i++) {
@@ -451,4 +503,5 @@ int main(int argc, char *argv[])
     }
 
     free(clusters);
+    
 }
