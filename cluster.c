@@ -401,7 +401,7 @@ int load_clusters(char *filename, struct cluster_t **arr)
     }
 
     if (fscanf(file, "count=%f%[^\n]", &raw_n, &test_char) != 1) {
-        raise_error(file, NULL, 0, "Error: Count has to be an integer.");
+        raise_error(file, NULL, 0, "Error: Couldn't parse a file.");
         return 0;
     }
 
@@ -412,7 +412,7 @@ int load_clusters(char *filename, struct cluster_t **arr)
 
     n = (int) raw_n;
 
-    if (n < 1) {
+    if (n < 0) {
         raise_error(file, NULL, 0, "Error: Invalid cluster count.");
         return 0;
     }

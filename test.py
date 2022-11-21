@@ -26,6 +26,8 @@ BLUE = "\033[38;5;12m"
 BOLD = "\033[1m"
 END = "\033[0m"
 
+LOREM_IPSUM = "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum."
+
 BASE_INPUT = [
     ("40", "86", "663"),
     ("43", "747", "938"),
@@ -49,6 +51,10 @@ BASE_INPUT = [
     ("93", "944", "835"),
 ]
 
+RANDOM_TEXT_INPUT = [(LOREM_IPSUM,)]
+
+WRONG_COUNT_INPUT = [("1", "1", "")]
+
 WRONG_ID_INPUT_1 = [("xx", "1", "2")]
 
 WRONG_ID_INPUT_2 = [("3.15", "1", "2")]
@@ -63,9 +69,7 @@ COORDINATE_OUT_OUF_RANGE_INPUT_2 = [("1", "2000", "2")]
 
 NON_UNIQUE_ID_INPUT = [("1", "1", "2"), ("1", "4", "8")]
 
-MULITPLE_OBJECTS_INPUT = [
-    ("1", "1", "2", "3", "4", "5")
-]
+MULITPLE_OBJECTS_INPUT = [("1", "1", "2", "3", "4", "5")]
 
 OUTPUT_1 = [(i + 1,) for i in range(20)]
 
@@ -86,12 +90,18 @@ OUTPUT_4 = [(1,)]
 
 
 class Tester:
-    def __init__(self, program_name: str, save_logs_file: bool, valgrind_enabled: bool, stop_on_error: bool) -> None:
+    def __init__(
+        self,
+        program_name: str,
+        save_logs_file: bool,
+        valgrind_enabled: bool,
+        stop_on_error: bool,
+    ) -> None:
         self.program_name = "./" + program_name
         self.test_count = 0
         self.pass_count = 0
         self.logs: List[Dict] = []
-        self.valgrind_enabled = valgrind_enabled 
+        self.valgrind_enabled = valgrind_enabled
         self.stop_on_error = stop_on_error
         self.save_logs_file = save_logs_file
 
@@ -193,25 +203,31 @@ class Tester:
             self.pass_count += 1
             self.print_pass(test_name)
 
+        input_file_content = ""
+        try:
+            input_file_content = open(f"./{INPUT_FILENAME}").read()
+        except Exception as e:
+            pass
+
         data = {
             "test_name": test_name,
             "status": "failed" if failed else "ok",
             "error_message": error_msg,
             "args": " ".join(all_args),
+            "file_content": input_file_content,
             "exptected_output": str_output,
             "stdout": p.stdout,
             "stderr": p.stderr,
             "return_code": p.returncode,
-            "valgrind": valgrind_out
+            "valgrind": valgrind_out,
         }
 
         self.test_cleanup()
         self.logs.append(data)
 
         if failed and self.stop_on_error:
-            if self.valgrind_enabled:
-                os.remove(VALGRIND_LOG_FILENAME)
-            
+            self.valgrind_cleanup()
+
             if self.save_logs_file:
                 t.save_logs()
 
@@ -229,18 +245,26 @@ class Tester:
                     "--quiet",
                     f"--log-file={VALGRIND_LOG_FILENAME}",
                     self.program_name,
-                ] + args,
+                ]
+                + args,
                 stdout=PIPE,
                 stderr=PIPE,
             )
         except Exception as e:
             self.print_fail("Neporadilo se spustit valgrind")
             print(self.debug(e))
+            self.valgrind_cleanup()
             return ""
 
-        with open(VALGRIND_LOG_FILENAME, encoding="utf8", mode="r") as f:
-            valgrind_out = f.read()
-            return valgrind_out
+        try:
+            with open(VALGRIND_LOG_FILENAME, encoding="utf8", mode="r") as f:
+                valgrind_out = f.read()
+                return valgrind_out
+        except Exception as e:
+            self.print_fail("Neporadilo se precist valgrind log")
+            print(self.debug(e))
+            self.valgrind_cleanup()
+            return ""
 
     def print_stats(self) -> None:
         success_rate = self.pass_count / self.test_count * 100
@@ -252,17 +276,16 @@ class Tester:
 
     def create_input_file(
         self,
-        _input: List[Tuple[str, str, str]],
+        input_: List[Tuple[str, str, str]],
         filename: str,
-        count: Optional[int] = None,
+        count: Optional[str] = None,
     ) -> None:
         if count is None:
-            count = len(_input)
+            count = str(len(input_))
 
-        out = ""
-        out += f"count={count}\n"
+        out = f"count={count}\n"
 
-        for line in _input:
+        for line in input_:
             for item in line:
                 out += f"{item} "
 
@@ -310,7 +333,14 @@ class Tester:
     @staticmethod
     def test_cleanup() -> None:
         try:
-            os.remove("./test.in")
+            os.remove(f"./{INPUT_FILENAME}")
+        except Exception:
+            pass
+
+    @staticmethod
+    def valgrind_cleanup() -> None:
+        try:
+            os.remove(f"./{VALGRIND_LOG_FILENAME}")
         except Exception:
             pass
 
@@ -351,7 +381,10 @@ class Tester:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Tester 2. IZP projektu [2022]")
     parser.add_argument(
-        "program_name", metavar="PROGRAM_NAME", type=str, help="Cesta k programu (napriklad: ./cluster)"
+        "program_name",
+        metavar="PROGRAM_NAME",
+        type=str,
+        help="Cesta k programu (napriklad: ./cluster)",
     )
     parser.add_argument(
         "--save-logs",
@@ -376,7 +409,9 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    t = Tester(args.program_name, args.save_logs, args.valgrind_enabled, args.stop_on_error)
+    t = Tester(
+        args.program_name, args.save_logs, args.valgrind_enabled, args.stop_on_error
+    )
 
     t.test_cleanup()
 
@@ -455,6 +490,17 @@ if __name__ == "__main__":
     )
 
     t.test(
+        "Test nahodneho textu #1",
+        [],
+        INPUT_FILENAME,
+        RANDOM_TEXT_INPUT,
+        [],
+        create_file=True,
+        should_fail=True,
+        count=LOREM_IPSUM,
+    )
+
+    t.test(
         "Test parametru count #1",
         ["1"],
         INPUT_FILENAME,
@@ -462,7 +508,7 @@ if __name__ == "__main__":
         OUTPUT_3,
         create_file=True,
         should_fail=True,
-        count=30,
+        count="30",
     )
 
     t.test(
@@ -472,7 +518,18 @@ if __name__ == "__main__":
         BASE_INPUT,
         OUTPUT_4,
         create_file=True,
-        count=1,
+        count="1",
+    )
+
+    t.test(
+        "Test parametru count #3",
+        ["1"],
+        INPUT_FILENAME,
+        WRONG_COUNT_INPUT,
+        [],
+        create_file=True,
+        should_fail=True,
+        count="-100",
     )
 
     t.test(
@@ -559,3 +616,4 @@ if __name__ == "__main__":
         t.save_logs()
 
     t.print_stats()
+    t.valgrind_cleanup()
