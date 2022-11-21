@@ -4,8 +4,7 @@
 # Autor: - Ramsay#2303
 # Zdroj testu: https://github.com/harmim/vut-izp-proj3/tree/master/tests
 # Priklady pouziti:
-#     python3 ./test.py t9search
-#     python3 ./test.py t9search --bonus 2
+#     python3 ./test.py t9search --valgrind
 
 
 import argparse
@@ -54,9 +53,9 @@ WRONG_ID_INPUT_1 = [("xx", "1", "2")]
 
 WRONG_ID_INPUT_2 = [("3.15", "1", "2")]
 
-WRONG_COORDINATE_INPUT_1 = [("1", "xx", "2")]
+WRONG_COORDINATE_INPUT_1 = [("1", "1", "1"), ("2", "xx", "2")]
 
-WRONG_COORDINATE_INPUT_2 = [("1", "3.15", "2")]
+WRONG_COORDINATE_INPUT_2 = [("1", "1", "1"), ("2", "3.15", "2")]
 
 COORDINATE_OUT_OUF_RANGE_INPUT_1 = [("1", "-1000", "2")]
 
@@ -87,13 +86,14 @@ OUTPUT_4 = [(1,)]
 
 
 class Tester:
-    def __init__(self, program_name: str, valgrind_enabled: bool, stop_on_error: bool) -> None:
+    def __init__(self, program_name: str, save_logs_file: bool, valgrind_enabled: bool, stop_on_error: bool) -> None:
         self.program_name = "./" + program_name
         self.test_count = 0
         self.pass_count = 0
         self.logs: List[Dict] = []
         self.valgrind_enabled = valgrind_enabled 
         self.stop_on_error = stop_on_error
+        self.save_logs_file = save_logs_file
 
     def test(
         self,
@@ -211,6 +211,11 @@ class Tester:
         if failed and self.stop_on_error:
             if self.valgrind_enabled:
                 os.remove(VALGRIND_LOG_FILENAME)
+            
+            if self.save_logs_file:
+                t.save_logs()
+
+            t.print_stats()
 
             exit(1)
 
@@ -346,7 +351,7 @@ class Tester:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Tester 2. IZP projektu [2022]")
     parser.add_argument(
-        "prog", metavar="P", type=str, help="Jmeno programu (napriklad: t9search)"
+        "program_name", metavar="PROGRAM_NAME", type=str, help="Cesta k programu (napriklad: ./cluster)"
     )
     parser.add_argument(
         "--save-logs",
@@ -371,7 +376,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    t = Tester(args.prog, args.valgrind_enabled, args.stop_on_error)
+    t = Tester(args.program_name, args.save_logs, args.valgrind_enabled, args.stop_on_error)
 
     t.test_cleanup()
 

@@ -10,6 +10,8 @@
 #include <math.h> // sqrtf
 #include <limits.h> // INT_MAX
 #include <stdbool.h>
+#include <errno.h>
+#include <string.h>
 
 /*****************************************************************
  * Ladici makra. Vypnout jejich efekt lze definici makra
@@ -68,10 +70,15 @@ struct cluster_t {
 typedef struct obj_t obj_t;
 typedef struct cluster_t cluster_t;
 
+#define LINE_LENGTH 100
+
 void clear_cluster(struct cluster_t *c);
 
 /**********************************************************************/
 /* Vlastni funkce*/
+bool is_integer(float num) {
+    return (int)num == num;
+}
 
 void clear_clusters(cluster_t *clusters, int size) {
     assert(clusters != NULL);
@@ -83,14 +90,12 @@ void clear_clusters(cluster_t *clusters, int size) {
 
 // Takes pointer to array of clusters, free's all the clusters and the array
 // Then it free's array of ID's nad closes a file
-void raise_error(FILE *f, cluster_t **clusters_ptr, int clusters_size, int *ids, char *msg) {
+void raise_error(FILE *f, cluster_t **clusters_ptr, int clusters_size, char *msg) {
     if (clusters_ptr && *clusters_ptr) {
         clear_clusters(*clusters_ptr, clusters_size);
         free(*clusters_ptr);
         *clusters_ptr = NULL;
     }
-
-    free(ids);
 
     if (f) {
         fclose(f);
@@ -99,19 +104,43 @@ void raise_error(FILE *f, cluster_t **clusters_ptr, int clusters_size, int *ids,
     fprintf(stderr, "%s\n", msg);
 }
 
-bool array_contains(int *arr, int len, int num) {
+bool obj_exists(cluster_t *clusters, int len, int obj_id) {
     for (int i = 0; i < len; i++)
     {
-        if (arr[i] == num) {
-            return true;
+        for (int j = 0; j < clusters[i].size; j++)
+        {
+            if (clusters[i].obj[j].id == obj_id)
+            {
+                return true;
+            }
         }
     }
     
     return false;
 }
 
-bool is_integer(float num) {
-    return (int)num == num;
+bool parse_int(char *str, int *num) {
+    char *endptr = NULL;
+    errno = 0;
+    long val = strtol(str, &endptr, 10);
+
+    if (errno != 0 || *endptr != '\0' || val > INT_MAX || val < INT_MIN) {
+        return false;
+    }
+
+    *num = val;
+
+    return true;
+}
+
+void split(char *str, char *delim, char *tokens[], int max_splits, int *tokens_len) {
+    char *token = strtok(str, delim);
+    *tokens_len = 0;
+
+    while (token != NULL || tokens_len != max_splits) {
+        tokens[(*tokens_len)++] = token;
+        token = strtok(NULL, delim);
+    }
 }
 
 /*****************************************************************
@@ -360,70 +389,70 @@ int load_clusters(char *filename, struct cluster_t **arr)
     assert(arr != NULL);
 
     FILE *file = fopen(filename, "r");
-    float raw_n;
+    char buff[LINE_LENGTH];
+    char test_char;
     int n;
-    int *ids;
+    float raw_n;
     *arr = NULL;
 
     if (file == NULL) {
-        raise_error(NULL, NULL, 0, NULL, "Error: File could not be opened.");
+        raise_error(NULL, NULL, 0, "Error: File could not be opened.");
         return 0;
     }
 
-    fscanf(file, "count=%f", &raw_n);
+    if (fscanf(file, "count=%f%[^\n]", &raw_n, &test_char) != 1) {
+        raise_error(file, NULL, 0, "Error: Count has to be an integer.");
+        return 0;
+    }
 
     if (!is_integer(raw_n)) {
-        raise_error(file, NULL, 0, NULL, "Error: Count has to be an integer.");
+        raise_error(file, NULL, 0, "Error: Count has to be an integer.");
         return 0;
     }
 
     n = (int) raw_n;
 
     if (n < 1) {
-        raise_error(file, NULL, 0, NULL, "Error: Invalid cluster count.");
+        raise_error(file, NULL, 0, "Error: Invalid cluster count.");
         return 0;
     }
 
-    ids = calloc(n, sizeof(*ids));
     (*arr) = malloc(n * sizeof(struct cluster_t));
 
-    if (*arr == NULL || ids == NULL) {
-        raise_error(file, arr, 0, ids, "Error: Memory allocation failed.");
+    if (*arr == NULL) {
+        raise_error(file, arr, 0, "Error: Memory allocation failed.");
         return 0;
     }
 
     for (int i = 0; i < n; i++) {
         float id, x, y;
 
-        if (fscanf(file, "%f %f %f\n", &id, &x, &y) != 3) {
-            raise_error(file, arr, i, ids, "Error: Invalid format of input.");
+        if (fscanf(file, "%f %f %f%[^\n]", &id, &x, &y, &test_char) != 3) {
+            raise_error(file, arr, i, "Error: Invalid format of input.");
             return 0;
         }
 
         if (!is_integer(id) || !is_integer(x) || !is_integer(y)) {
-            raise_error(file, arr, i, ids, "Error: Invalid format of input. Numbers have to be integers.");
+            raise_error(file, arr, i, "Error: Invalid format of input. Numbers have to be integers.");
             return 0;
         }
 
-        if (array_contains(ids, i, id)) {
-            raise_error(file, arr, i, ids, "Error: Object ID is not unique.");
+        if (obj_exists(*arr, i, id)) {
+            raise_error(file, arr, i, "Error: Object ID is not unique.");
             return 0;
         }
 
         if (x < 0 || x > 1000 || y < 0 || y > 1000) {
-            raise_error(file, arr, i, ids, "Error: Invalid coordinates. Coordinates must be in range <0, 1000>.");
+            raise_error(file, arr, i, "Error: Invalid coordinates. Coordinates must be in range <0, 1000>.");
             return 0;
         }
 
         obj_t obj = { (int)id, x, y};
         init_cluster(&((*arr)[i]), 1);
         append_cluster(&((*arr)[i]), obj);
-
-        ids[i] = id;
     }
 
     fclose(file);
-    free(ids);
 
     return n;
 }
@@ -503,5 +532,4 @@ int main(int argc, char *argv[])
     }
 
     free(clusters);
-    
 }
