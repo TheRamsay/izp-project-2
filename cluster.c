@@ -70,7 +70,9 @@ struct cluster_t {
 typedef struct obj_t obj_t;
 typedef struct cluster_t cluster_t;
 
-#define LINE_LENGTH 100
+#define LINE_LENGTH 100 
+#define CENTROID_ID -1 // ID for special centroid objects
+#define INVALID_IDX -1
 
 void clear_cluster(struct cluster_t *c);
 
@@ -78,6 +80,15 @@ void clear_cluster(struct cluster_t *c);
 /* Vlastni funkce*/
 bool is_integer(float num) {
     return (int)num == num;
+}
+
+bool array_contains(int *arr, int size, int val) {
+    for (int i = 0; i < size; i++) {
+        if (arr[i] == val) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void clear_clusters(cluster_t *clusters, int size) {
@@ -232,6 +243,29 @@ void append_cluster(struct cluster_t *c, struct obj_t obj)
     c->obj[c->size++] = obj;
 }
 
+void remove_object(cluster_t *c, int obj_id) {
+    int idx = INVALID_IDX;
+
+    for (int i = 0; i < c->size; i++)
+    {
+        if (c->obj[i].id == obj_id) {
+            idx = i;
+            break;
+        }
+    }
+    
+    if (idx == INVALID_IDX) {
+        return;
+    }
+
+    for (size_t i = idx; i < c->size - 1; i++)
+    {
+        c->obj[i] = c->obj[i + 1];
+    }
+
+    c->size--;
+}
+
 /*
  Seradi objekty ve shluku 'c' vzestupne podle jejich identifikacniho cisla.
  */
@@ -317,13 +351,37 @@ float cluster_distance(struct cluster_t *c1, struct cluster_t *c2)
     return min;
 }
 
+float cluster_distance_complete_linkage(cluster_t *c1, cluster_t *c2) {
+    assert(c1 != NULL);
+    assert(c1->size > 0);
+    assert(c2 != NULL);
+    assert(c2->size > 0);
+
+    float max = 0.0;
+
+    for (int i = 0; i < c1->size; i++)
+    {
+        for (int j = 0; j < c2->size; j++)
+        {
+            float distance = obj_distance(&c1->obj[i], &c1->obj[j]);
+
+            if (distance > max) {
+                max = distance;
+            }
+        }
+        
+    }
+
+    return max;
+}
+
 /*
  Funkce najde dva nejblizsi shluky. V poli shluku 'carr' o velikosti 'narr'
  hleda dva nejblizsi shluky. Nalezene shluky identifikuje jejich indexy v poli
  'carr'. Funkce nalezene shluky (indexy do pole 'carr') uklada do pameti na
  adresu 'c1' resp. 'c2'.
 */
-void find_neighbours(struct cluster_t *carr, int narr, int *c1, int *c2)
+void find_neighbours(struct cluster_t *carr, int narr, int *c1, int *c2, float (*comparator)(cluster_t *, cluster_t*))
 {
     assert(carr != NULL);
     assert(narr > 0);
@@ -332,7 +390,7 @@ void find_neighbours(struct cluster_t *carr, int narr, int *c1, int *c2)
 
     for (int i = 0; i < narr - 1; i++) {
         for (int j = i + 1; j < narr; j++) {
-            float distance = cluster_distance(&carr[i], &carr[j]);
+            float distance = (*comparator)(&carr[i], &carr[j]);
 
             if (distance < min) {
                 min = distance;
@@ -457,11 +515,138 @@ int load_clusters(char *filename, struct cluster_t **arr)
     return n;
 }
 
-void process(struct cluster_t *clusters, int n, int k)
+void calculate_centroid(cluster_t *c, obj_t *centroid) {
+    assert(c);
+
+    for (int i = 0; i < c->size; i++)
+    {   
+        centroid->x += c->obj[i].x;
+        centroid->y += c->obj[i].y;
+    }
+
+    centroid->x /= c->size;
+    centroid->y /= c->size;
+}
+
+void generate_random_ints(obj_t *objects, obj_t **centroids, int size, int count) {
+    int *generated = malloc(count * sizeof(int));
+
+    if (generated == NULL) {
+        // TODO null handling
+        return;
+    }
+
+    int random;
+
+    for (int i = 0; i < count; i++) {
+        do
+        {
+            random = rand() % size;
+        } 
+        while (array_contains(generated, count, random));
+
+        generated[i] = random;
+        centroids[i] = &objects[random];
+    }
+
+    free(generated);
+}
+
+// Functions takes array of clusters and objects, index of current object, and number of clusters
+int assign_to_cluster(obj_t *centroids, obj_t *obj, int k) {
+    float min = INFINITY;
+    int new_cluster_idx = INVALID_IDX;
+
+    // If object is special centroid type, we skip him
+    if (obj->id == CENTROID_ID) {
+        return INVALID_IDX;
+    }
+
+    // Finds the nearest cluster based on the distance from centroid
+    for (int i = 0; i < k; i++)
+    {
+        float distance = obj_distance(obj, &centroids[i]);
+        if (distance < min) {
+            min = distance;
+            new_cluster_idx = i;
+        }
+    }
+
+    // Appending object to different cluster and removing it from previous.
+    // append_cluster(&clusters[min_idx], objects[object_idx]);
+    // remove_object(&clusters[previous_cluster], objects[object_idx].id);
+    return new_cluster_idx;
+}
+
+void k_means(cluster_t *clusters, obj_t *objects, int size, int k) {
+    // Array of indexes from array of objects, contains centroids for each cluster.
+    // First centroid is centroid of first cluster in array of clusters etc.
+    obj_t **centroids = calloc(k, sizeof(*centroids));
+
+    // Generate k random indexes for centroids of each cluster
+    generate_random_ints(objects, centroids, size, k);
+
+    // Assign these centroid objects to each cluster
+    for (int i = 0; i < k; i++)
+    {
+        init_cluster(&clusters[i], 1);
+        append_cluster(&clusters[i], *centroids[i]);
+    }
+
+    // Loop over all objects and assign each objects to it's nearest cluster.
+    // Distance is measured by distance to cluster's centroid.
+    for (int i = 0; i < size; i++)
+    {
+        int cluster_idx = assign_to_cluster(centroids, &objects[i], k);
+        append_cluster(&clusters[cluster_idx], objects[i]);
+    }
+
+    // Iterate over clusters,find new centeroids and reassign clusters, until no changes are made.
+    while (true) {
+        int changed = false;
+
+        // recalculates centroids
+        for (int i = 0; i < k; i++)
+        {
+            obj_t centroid = { .id = CENTROID_ID };
+            calculate_centroid(&clusters[i], &centroid);
+        }
+
+        // Reassign all objects
+        for (int i = 0; i < k; i++)
+        {
+            for (int j = 0; j < clusters[i].size; j++)
+            {
+                int cluster_idx = assign_to_cluster(clusters, objects, k);
+                if (cluster_idx != INVALID_IDX) {
+                    changed = true;
+                }
+            }
+        }
+
+        if (!changed) {
+            break;
+        }
+    }
+
+    free(centroids);
+}
+
+void single_linkage(struct cluster_t *clusters, int n, int k)
 {
     while (n > k) {
         int c1, c2;
-        find_neighbours(clusters, n, &c1, &c2);
+        find_neighbours(clusters, n, &c1, &c2, &cluster_distance);
+        merge_clusters(&clusters[c1], &clusters[c2]);
+        n = remove_cluster(clusters, n, c2);
+    }
+}
+
+void complete_linkage(struct cluster_t *clusters, int n, int k)
+{
+    while (n > k) {
+        int c1, c2;
+        find_neighbours(clusters, n, &c1, &c2, &cluster_distance_complete_linkage);
         merge_clusters(&clusters[c1], &clusters[c2]);
         n = remove_cluster(clusters, n, c2);
     }
@@ -524,7 +709,7 @@ int main(int argc, char *argv[])
         k = n;
     }
 
-    process(clusters, n, k);
+    complete_linkage(clusters, n, k);
     print_clusters(clusters, k);
 
     for (int i = 0; i < k; i++) {

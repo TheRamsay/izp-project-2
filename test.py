@@ -111,7 +111,7 @@ class Tester:
         args: List[str],
         filename: Optional[str],
         input_: List[Tuple[str, str]],
-        expected_contacts: Optional[List[int]] = None,
+        expected_output: Optional[List[int]] = None,
         should_fail: bool = False,
         check_crash: bool = False,
         create_file: bool = True,
@@ -125,8 +125,8 @@ class Tester:
             self.create_input_file(input_, filename, count)
 
         str_output = (
-            self.create_output(input_, expected_contacts)
-            if expected_contacts is not None
+            self.create_output(input_, expected_output)
+            if expected_output is not None
             else ""
         )
 
@@ -296,12 +296,11 @@ class Tester:
             f.write(out)
 
     def assert_equal(self, output: str, expected_output: str) -> bool:
-        lines = {line.lower() for line in expected_output.rstrip().split("\n")}
+        exptected_lines = {line.lower() for line in expected_output.rstrip().split("\n")}
+        output_lines = output.rstrip().split("\n")
 
-        for line in output.rstrip().split("\n"):
-            line = line.lower()
-
-            if line not in lines:
+        for line in output_lines:
+            if line.lower() not in exptected_lines:
                 return False
 
         return True
@@ -309,11 +308,11 @@ class Tester:
     def create_output(
         self,
         input_: List[Tuple[str, str, str]],
-        exptected_contacts: List[Tuple[int, ...]],
+        expected_output: List[Tuple[int, ...]],
     ) -> str:
         out = "Clusters:\n"
 
-        for idx, cluster in enumerate(exptected_contacts):
+        for idx, cluster in enumerate(expected_output):
             out += f"cluster {idx}: "
             for obj_idx in cluster:
                 obj_id, x, y = input_[obj_idx - 1]
@@ -323,7 +322,6 @@ class Tester:
             out = out[:-1]
             out += "\n"
 
-        out = out[:-1]
         return out
 
     def save_logs(self) -> None:
