@@ -1,6 +1,6 @@
 CC=gcc
-CFLAGS = -std=c99 -Wall -Wextra -ggdb -fno-omit-frame-pointer -fsanitize=address -O1
+CFLAGS = -std=c99 -Wall -Wextra -g
 
 cluster: cluster.o
-	$(CC) -o cluster cluster.c -lm
+	$(CC) $(CFLAGS) -o cluster cluster.c -lm
 
