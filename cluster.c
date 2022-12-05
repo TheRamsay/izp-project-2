@@ -1,6 +1,8 @@
 /**
  * Kostra programu pro 2. projekt IZP 2022/23
  *
+ * @author Dominik Huml - xhumld00
+ * 
  * Jednoducha shlukova analyza: 2D nejblizsi soused.
  * Single linkage
  */
@@ -10,7 +12,6 @@
 #include <math.h> // sqrtf
 #include <limits.h> // INT_MAX
 #include <stdbool.h>
-#include <errno.h>
 #include <string.h> 
 #include <time.h> // Generating seed for rand()
 
@@ -92,10 +93,8 @@ typedef struct {
     char *filename;
 } Config;
 
-#define BUFFER_LENGTH 15 
-#define LINE_LENGTH BUFFER_LENGTH * 3 + 10 // id + x + y + extra space
-#define CENTROID_ID -1 // ID for special centroid objects
-#define INVALID_IDX -1 //fwfew
+#define CENTROID_ID -2 // ID for special centroid objects
+#define INVALID_IDX -1 // Return value for invalid index
 #define NO_CLUSTERS_LOADED 0
 
 void clear_cluster(struct cluster_t *c);
@@ -111,14 +110,10 @@ int print_error(char *msg) {
     return EXIT_FAILURE;
 }
 
-// // Check if number is an integer
-// bool is_integer(float num) {
-//     return (num == (int)num);
-// }
-
 // Check if int value exists in an array
 bool array_contains(int *arr, int size, int val) {
-    for (int i = 0; i < size; i++) {
+    for (int i = 0; i < size; i++) 
+    {
         if (arr[i] == val) {
             return true;
         }
@@ -132,12 +127,13 @@ void clear_clusters(cluster_t *clusters, int size) {
         return;
     }
 
-    for (int i = 0; i < size; i++) {
+    for (int i = 0; i < size; i++) 
+    {
         clear_cluster(&clusters[i]);
     }
 }
 
-// Cleans everything in main
+// Clears everything in main
 void final_cleanup(cluster_t *clusters, obj_t *objects, int cluster_count) {
     clear_clusters(clusters, cluster_count);
     free(clusters);
@@ -191,7 +187,7 @@ bool is_unique(cluster_t *clusters, int cluster_count, int obj_id) {
     return true;
 }
 
-// Check if string is valid integer and parse it
+// Check if float is valid integer
 bool is_integer(float float_value) {
 
     long long_value = (long)float_value;
@@ -201,22 +197,6 @@ bool is_integer(float float_value) {
     }
 
     return float_value == (int) float_value;
-
-    // char *endptr = NULL;
-    // errno = 0;
-    // long val = strtol(str, &endptr, 10);
-
-    // if (errno != 0 || *endptr != '\0' || val > INT_MAX || val < INT_MIN) {
-    //     return false;
-    // }
-
-    // // Check if number is an integer, because strtol doesn't check it
-    // if (!is_integer(atof(str))) {
-    //     return false;
-    // }
-    // *num = val;
-
-    // return true;
 }
 
 /*****************************************************************
@@ -241,10 +221,9 @@ void init_cluster(struct cluster_t *c, int cap)
 
     if (cap == 0) {
         c->obj = NULL;
-        return;
+    } else {
+        c->obj = malloc(cap * sizeof(struct obj_t));
     }
-
-    c->obj = malloc(cap * sizeof(struct obj_t));
 
     if (c->obj == NULL) {
         cap = 0;
@@ -350,7 +329,8 @@ void merge_clusters(struct cluster_t *c1, struct cluster_t *c2)
         resize_cluster(c1, c1->size + c2->size);
     }
 
-    for (int i = 0; i < c2->size; i++) {
+    for (int i = 0; i < c2->size; i++) 
+    {
         append_cluster(c1, c2->obj[i]);
     }
 
@@ -373,7 +353,8 @@ int remove_cluster(struct cluster_t *carr, int narr, int idx)
 
     clear_cluster(&carr[idx]);
 
-    for (int i = idx; i < narr - 1; i++) {
+    for (int i = idx; i < narr - 1; i++) 
+    {
         carr[i] = carr[i + 1];
     }
 
@@ -403,8 +384,10 @@ float cluster_distance(struct cluster_t *c1, struct cluster_t *c2)
 
     float min = INFINITY;
 
-    for (int i = 0; i < c1->size; i++) {
-        for (int j = 0; j < c2->size; j++) {
+    for (int i = 0; i < c1->size; i++) 
+    {
+        for (int j = 0; j < c2->size; j++) 
+        {
             float distance = obj_distance(&c1->obj[i], &c2->obj[j]);
 
             if (distance < min) {
@@ -429,13 +412,12 @@ float cluster_distance_complete_linkage(cluster_t *c1, cluster_t *c2) {
     {
         for (int j = 0; j < c2->size; j++)
         {
-            float distance = obj_distance(&c1->obj[i], &c1->obj[j]);
+            float distance = obj_distance(&c1->obj[i], &c2->obj[j]);
 
             if (distance > max) {
                 max = distance;
             }
         }
-        
     }
 
     return max;
@@ -454,12 +436,11 @@ float cluster_distance_average_linkage(cluster_t *c1, cluster_t *c2) {
     {
         for (int j = 0; j < c2->size; j++)
         {
-            distances_sum += obj_distance(&c1->obj[i], &c1->obj[j]);
+            distances_sum += obj_distance(&c1->obj[i], &c2->obj[j]);
         }
-        
     }
 
-    return distances_sum / (c1->size + c2->size);
+    return distances_sum / (c1->size * c2->size);
 }
 
 /*
@@ -477,8 +458,10 @@ void find_neighbours(struct cluster_t *carr, int narr, int *c1, int *c2, float (
 
     float min = INFINITY;
 
-    for (int i = 0; i < narr - 1; i++) {
-        for (int j = i + 1; j < narr; j++) {
+    for (int i = 0; i < narr - 1; i++) 
+    {
+        for (int j = i + 1; j < narr; j++) 
+        {
             float distance = (*comparator)(&carr[i], &carr[j]);
 
             if (distance < min) {
@@ -541,7 +524,6 @@ int load_clusters(char *filename, struct cluster_t **arr, ClusteringMethod metho
     // Character for checking if there is something after valid data
     char garbage_test;
     int cluster_count;
-    char cluster_count_str[15], line[BUFFER_LENGTH * 3 + 10];
     float cluster_count_float;
     *arr = NULL;
     *objects = NULL;
@@ -551,32 +533,18 @@ int load_clusters(char *filename, struct cluster_t **arr, ClusteringMethod metho
         return NO_CLUSTERS_LOADED;
     }
 
-    // if (
-    //     fgets(line, LINE_LENGTH, file) == NULL ||
-    //     sscanf(line, "count=%s%[^\n]", cluster_count_str, &garbage_test) != 1
-    //     ) 
-    // {
-    //     fclose(file);
-
-
-
-    //     raise_error(NULL, arr, objects, 0, "Error: Couldn't parse a file.");
-    //     return NO_CLUSTERS_LOADED;
-    // }
-    if (fscanf(file, "count=%f%[^\n]", &cluster_count_float, &garbage_test) != 1 || !is_integer(cluster_count_float)) {
-        raise_error(file, arr, objects, 0, "Error: Couldn't parse a file.");
+    if (
+        fscanf(file, "count=%f%[^\n]", &cluster_count_float, &garbage_test) != 1 || 
+        !is_integer(cluster_count_float)
+        ) 
+    {
+        raise_error(file, arr, objects, 0, "Error: Couldn't parse a file header.");
         return NO_CLUSTERS_LOADED;
     }
 
-
-    // if (!parse_int(cluster_count_str, &cluster_count)) {
-    //     raise_error(file, arr, objects, 0, "Error: Count has to be an integer.");
-    //     return NO_CLUSTERS_LOADED;
-    // }
-
     cluster_count = (int) cluster_count_float;
 
-    if (cluster_count < 0) {
+    if (cluster_count < 1) {
         raise_error(file, arr, objects, 0, "Error: Invalid cluster count.");
         return NO_CLUSTERS_LOADED;
     }
@@ -597,33 +565,25 @@ int load_clusters(char *filename, struct cluster_t **arr, ClusteringMethod metho
         }
     }
 
-    for (int i = 0; i < cluster_count; i++) {
+    for (int i = 0; i < cluster_count; i++) 
+    {
         float id, x, y;
-        // char id_str[BUFFER_LENGTH], x_str[BUFFER_LENGTH], y_str[BUFFER_LENGTH];
 
-        if (fscanf(file, "%f %f %f%[^\n]", &id, &x, &y, &garbage_test) != 3) {
+
+        // Check if line has right format
+        if (
+            fscanf(file, "%f %f %f%c", &id, &x, &y, &garbage_test) != 4 ||
+            garbage_test != '\n'
+            ) 
+        {
             raise_error(file, arr, objects, i, "Error: Invalid format of input.");
             return NO_CLUSTERS_LOADED;
         }
-
-        // if (
-        //     fgets(line, LINE_LENGTH, file) == NULL || 
-        //     sscanf(line, "%s %s %s%[^\n]", id_str, x_str, y_str, &garbage_test) != 3
-        //     ) 
-        // {
-        //     raise_error(file, arr, objects, i, "Error: Invalid format of input.");
-        //     return NO_CLUSTERS_LOADED;
-        // }
 
         if (!is_integer(id) || !is_integer(x) || !is_integer(y)) {
             raise_error(file, arr, objects, i, "Error: Invalid format of input. Numbers have to be integers.");
             return NO_CLUSTERS_LOADED;
         }
-
-        // if (!parse_int(id_str, &id) || !parse_int(x_str, &x) || !parse_int(y_str, &y)) {
-        //     raise_error(file, arr, objects, i, "Error: Invalid format of input. Numbers have to be integers.");
-        //     return NO_CLUSTERS_LOADED;
-        // }
 
         // Checks an uniqueness of id, if we are using k-means method, we search array of objects.
         // Otherwise we search array of clusters.
@@ -696,7 +656,8 @@ void generate_random_ints(obj_t *objects, obj_t *centroids, int obj_count, int f
 
     int random_number;
 
-    for (int i = 0; i < final_clusters; i++) {
+    for (int i = 0; i < final_clusters; i++) 
+    {
         do
         {
             random_number = rand() % obj_count;
@@ -856,6 +817,7 @@ void print_clusters(struct cluster_t *carr, int narr)
     }
 }
 
+// Parse clustering method from command line arguments
 ClusteringMethod parse_method(char *argument) {
     if (strcmp(argument, "-k") == 0) {
         return K_MEANS;
@@ -907,12 +869,16 @@ int parse_arguments(char *argv[], int argc, Config *config)
             return print_error("Error: You Unknown argument.\n");
         }
 
+        // Check if second argument is N and third method
         num = atof(argv[2]);
         if (is_integer(num)) {
             config->final_clusters = (int) num;
+        } else {
+            return print_error("Error: Unknown argument.\n");
+            break;
         }
 
-        if ((method = parse_method(argv[2])) != UNKNOWN) {
+        if ((method = parse_method(argv[3])) != UNKNOWN) {
             config->method = method;
             break;
         }
@@ -975,4 +941,6 @@ int main(int argc, char *argv[])
     print_clusters(clusters, config.final_clusters);
 
     final_cleanup(clusters, objects, config.final_clusters);
+
+    return EXIT_SUCCESS;
 }
