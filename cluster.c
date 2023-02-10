@@ -449,8 +449,6 @@ float cluster_distance_average_linkage(cluster_t *c1, cluster_t *c2) {
  'carr'. Funkce nalezene shluky (indexy do pole 'carr') uklada do pameti na
  adresu 'c1' resp. 'c2'.
 */
-// Pozn. Pridal jsem si zde pointer na funkci, ktery porovnava vzdalenosti shluku.
-// Dal jsem si ji zde abych nemusel zbytecne kopirovat kod pro bonusovde metody.
 void find_neighbours(struct cluster_t *carr, int narr, int *c1, int *c2, float (*comparator)(cluster_t *, cluster_t*))
 {
     assert(carr != NULL);
@@ -514,8 +512,6 @@ void print_cluster(struct cluster_t *c)
  kam se odkazuje parametr 'arr'. Funkce vraci pocet nactenych objektu (shluku).
  V pripade nejake chyby uklada do pameti, kam se odkazuje 'arr', hodnotu NULL.
 */
-// Pozn. Pridal jsem si zde Enum pro urceni ktera metoda se pouziva pro shlukovani.
-// Dale jsem pridal take ukazatel na pole objektu, kvuli metode k-means, jelikoz ta na zacatku neprideluje kazdemu objektu vlastni shluk.
 int load_clusters(char *filename, struct cluster_t **arr, ClusteringMethod method, obj_t **objects)
 {
     assert(arr != NULL);
